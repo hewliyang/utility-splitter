@@ -10,10 +10,17 @@
 		[key: string]: number;
 	};
 
+	type Summary = {
+		total_w_gst: number;
+		total_wo_gst: number;
+	};
+
 	let bill_start = $state('');
 	let bill_end = $state('');
-	let bill_amt = $state(0);
-	let idle_cost_percent = $state(1);
+	let var_amt = $state(0);
+	let fixed_amt = $state(0);
+	let idle_cost_percent = $state(10);
+	let gst_percent = $state(9);
 	let tenants = $state<Tenant[]>([
 		{ name: 'Jean', absences: [] },
 		{ name: 'Hew', absences: [] },
@@ -32,11 +39,14 @@
 		const start = parseISO(bill_start);
 		const end = parseISO(bill_end);
 		const total_days = differenceInDays(end, start) + 1;
-		const daily_rate = bill_amt / total_days;
+		const daily_rate = var_amt / total_days;
 		const idle_daily_rate = daily_rate * (idle_cost_percent / 100);
 		const active_daily_rate = daily_rate - idle_daily_rate;
 
-		const split: BillSplit = Object.fromEntries(tenants.map((t) => [t.name, 0]));
+		const fixed_cost_per_person = fixed_amt / tenants.length;
+		const split: BillSplit = Object.fromEntries(
+			tenants.map((t) => [t.name, fixed_cost_per_person])
+		);
 		const absence_intervals = tenants.map((t) => ({
 			name: t.name,
 			intervals: t.absences.map((a) => ({
@@ -68,7 +78,18 @@
 			});
 		}
 
+		// apply GST
+		Object.keys(split).forEach((name) => {
+			split[name] *= 1 + gst_percent / 100;
+		});
+
 		return split;
+	});
+
+	let bill_summary: Summary = $derived.by(() => {
+		const total_w_gst = Object.values(bill_split).reduce((a, b) => a + b, 0);
+		const total_wo_gst = total_w_gst / (1 + gst_percent / 100);
+		return { total_w_gst, total_wo_gst };
 	});
 </script>
 
@@ -79,7 +100,7 @@
 			<h2>😳🔥</h2>
 			<h2>🔥😳</h2>
 		</div>
-		<div class="grid grid-cols-1 gap-4 md:grid-cols-3">
+		<div class="grid grid-cols-1 gap-4 md:grid-cols-5">
 			<div class="space-y-2">
 				<label for="bill-start" class="block text-sm font-medium text-gray-700">Start Date</label>
 				<input
@@ -99,11 +120,31 @@
 				/>
 			</div>
 			<div class="space-y-2">
-				<label for="bill-amount" class="block text-sm font-medium text-gray-700">Bill Amount</label>
+				<label for="bill-amount" class="block text-sm font-medium text-gray-700"
+					>Variable Cost</label
+				>
 				<input
 					type="number"
 					id="bill-amount"
-					bind:value={bill_amt}
+					bind:value={var_amt}
+					class="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+				/>
+			</div>
+			<div class="space-y-2">
+				<label for="fixed-cost" class="block text-sm font-medium text-gray-700">Fixed Cost</label>
+				<input
+					type="number"
+					id="fixed-cost"
+					bind:value={fixed_amt}
+					class="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+				/>
+			</div>
+			<div class="space-y-2">
+				<label for="gst" class="block text-sm font-medium text-gray-700">GST (%)</label>
+				<input
+					type="number"
+					id="gst"
+					bind:value={gst_percent}
 					class="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
 				/>
 			</div>
@@ -198,6 +239,16 @@
 						</div>
 					{/each}
 				</div>
+			</div>
+
+			<div class="flex items-center justify-between px-4 py-3">
+				<span>Total (+GST)</span>
+				<span>{bill_summary.total_w_gst.toFixed(2)}</span>
+			</div>
+
+			<div class="flex items-center justify-between px-4 py-3">
+				<span>Total (w/o GST)</span>
+				<span>{bill_summary.total_wo_gst.toFixed(2)}</span>
 			</div>
 		</section>
 	{/if}
